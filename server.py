@@ -1,4 +1,5 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
+from flask_paginate import Pagination
 from flask_mysqldb import MySQL
 
 app = Flask(__name__)
@@ -12,7 +13,7 @@ mysql = MySQL(app)
 
 # Home
 @app.route("/")
-def films():
+def film():
     cursor = mysql.connection.cursor()
     query = """SELECT film.film_id, film.title, category.name FROM film
                 JOIN film_category ON film.film_id = film_category.film_id
@@ -22,6 +23,26 @@ def films():
     result = cursor.fetchall()
     cursor.close()
     return jsonify(result)
+
+# View All Films - Pagination
+@app.route("/films", methods=["GET"])
+def films():
+    cursor = mysql.connection.cursor()
+    query = """SELECT film.film_id, film.title, category.name FROM film
+                JOIN film_category ON film.film_id = film_category.film_id
+                JOIN category ON category.category_id = film_category.category_id
+                ORDER BY film.film_id"""
+    cursor.execute(query)
+    result = cursor.fetchall()
+    cursor.close()
+
+    page = request.args.get("page", default=1, type=int)
+    page_size = request.args.get("page_size", default=10, type=int)
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+
+    paginated_films = result[start_index:end_index]    
+    return jsonify({'films': paginated_films})
 
 # Top 5 Rented Movies
 @app.route("/top5Rented")
@@ -102,6 +123,24 @@ def customer():
     result = cursor.fetchall()
     cursor.close()
     return jsonify(result)
+
+# View All Customers - Pagination
+@app.route("/customers", methods=["GET"])
+def customers():
+    cursor = mysql.connection.cursor()
+    query = """SELECT * from customer
+                ORDER BY customer_id"""
+    cursor.execute(query)
+    result = cursor.fetchall()
+    cursor.close()
+
+    page = request.args.get("page", default=1, type=int)
+    page_size = request.args.get("page_size", default=10, type=int)
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+
+    paginated_customers = result[start_index:end_index]    
+    return jsonify({'customers': paginated_customers})
 
 # View Customer Details based on ID
 @app.route("/customer/<id>")
