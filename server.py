@@ -12,7 +12,7 @@ app.config['MYSQL_DB'] = 'sakila'
 mysql = MySQL(app)
 
 # Home
-@app.route("/")
+@app.route("/allfilms")
 def film():
     cursor = mysql.connection.cursor()
     query = """SELECT film.film_id, film.title, category.name FROM film
@@ -22,7 +22,7 @@ def film():
     cursor.execute(query)
     result = cursor.fetchall()
     cursor.close()
-    return jsonify(result)
+    return jsonify({'films': result})
 
 # View All Films - Pagination
 @app.route("/films", methods=["GET"])
