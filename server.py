@@ -73,15 +73,9 @@ def filmDetails(id):
 @app.route("/top5Actors")
 def top5Actors():
     cursor = mysql.connection.cursor()
-    query = """SELECT film.film_id, film.title, COUNT(*) as rented FROM 
-	            (SELECT actor.actor_id, COUNT(*) as movies FROM actor
-		            JOIN film_actor on actor.actor_id = film_actor.actor_id
-		            GROUP BY actor.actor_id ORDER BY (COUNT(*)) DESC LIMIT 1) as topActors
-	            JOIN film_actor on topActors.actor_id = film_actor.actor_id
-                JOIN film ON film_actor.film_id = film.film_id
-                JOIN inventory ON film.film_id = inventory.film_id
-                JOIN rental ON rental.inventory_id = inventory.inventory_id
-                GROUP BY film.film_id ORDER BY COUNT(*) DESC LIMIT 5"""
+    query = """SELECT actor.actor_id, actor.first_name, actor.last_name, COUNT(*) as movies FROM actor
+	            JOIN film_actor on actor.actor_id = film_actor.actor_id
+	            GROUP BY actor.actor_id ORDER BY (COUNT(*)) DESC LIMIT 5;"""
     cursor.execute(query)
     result = cursor.fetchall()
     cursor.close()
@@ -114,7 +108,7 @@ def top5MoviesActor(id):
     return jsonify(result)
 
 # View All Customers
-@app.route("/customer")
+@app.route("/allcustomers")
 def customer():
     cursor = mysql.connection.cursor()
     query = """SELECT * from customer
@@ -151,6 +145,30 @@ def customerDetails(id):
     result = cursor.fetchall()
     cursor.close()
     return jsonify(result)
+
+@app.route("/customer/<id>/previouslyrented")
+def previouslyrented(id):
+    cursor = mysql.connection.cursor()
+    query = """SELECT customer.customer_id, COUNT(*) as count FROM customer
+                JOIN rental ON customer.customer_id = rental.customer_id
+                WHERE return_date IS NOT NULL AND customer.customer_id = {}
+                GROUP BY customer.customer_id ORDER BY COUNT(*) DESC""".format(id)
+    cursor.execute(query)
+    result = cursor.fetchall()
+    cursor.close()
+    return (jsonify(result))
+
+@app.route("/customer/<id>/currentlyrenting")
+def currentlyrenting(id):
+    cursor = mysql.connection.cursor()
+    query = """SELECT customer.customer_id, COUNT(*) as count FROM customer
+	            JOIN rental ON customer.customer_id = rental.customer_id
+	            WHERE return_date IS NULL AND customer.customer_id = {}
+	            GROUP BY customer.customer_id ORDER BY COUNT(*) DESC""".format(id)
+    cursor.execute(query)
+    result = cursor.fetchall()
+    cursor.close()
+    return (jsonify(result))
 
 if __name__ == "__main__":
     app.run(debug=True)
