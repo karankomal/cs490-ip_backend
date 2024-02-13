@@ -15,10 +15,12 @@ mysql = MySQL(app)
 @app.route("/allfilms")
 def film():
     cursor = mysql.connection.cursor()
-    query = """SELECT film.film_id, film.title, category.name FROM film
-                JOIN film_category ON film.film_id = film_category.film_id
-                JOIN category ON category.category_id = film_category.category_id
-                ORDER BY film.film_id"""
+    query = """SELECT film.film_id, initcap(film.title) as title, category.name, GROUP_CONCAT(initcap(actor.first_name), ' ' , initcap(actor.last_name) SEPARATOR ', ') as actors FROM film
+	            JOIN film_category ON film.film_id = film_category.film_id
+	            JOIN category ON category.category_id = film_category.category_id
+                JOIN film_actor ON film.film_id = film_actor.film_id
+                JOIN actor ON film_actor.actor_id = actor.actor_id
+	            GROUP BY film.film_id, title, category.name ORDER BY film.film_id;"""
     cursor.execute(query)
     result = cursor.fetchall()
     cursor.close()
@@ -48,7 +50,7 @@ def films():
 @app.route("/top5Rented")
 def top5Rented():
     cursor = mysql.connection.cursor()
-    query = """SELECT film.film_id, film.title, category.name as category, COUNT(*) as rented FROM rental
+    query = """SELECT film.film_id, initcap(film.title) as title, category.name as category, COUNT(*) as rented FROM rental
                 JOIN inventory ON rental.inventory_id = inventory.inventory_id
                 JOIN film ON inventory.film_id = film.film_id
 	            JOIN film_category ON film.film_id = film_category.film_id
@@ -63,7 +65,11 @@ def top5Rented():
 @app.route("/film/<id>")
 def filmDetails(id):
     cursor = mysql.connection.cursor()
-    query = "SELECT * from film WHERE film_id = {}".format(id)
+    query = """SELECT film.film_id, initcap(film.title) as title, film.description, film.release_year, film.language_id, film.original_language_id, film.rental_duration, film.rental_rate, film.length, film.replacement_cost, film.rating, film.special_features, film.last_update, GROUP_CONCAT(initcap(actor.first_name), ' ' , initcap(actor.last_name) SEPARATOR ', ') as actors FROM film 
+                JOIN film_actor ON film.film_id = film_actor.film_id
+                JOIN actor ON film_actor.actor_id = actor.actor_id
+                WHERE film.film_id = {}
+                GROUP BY film.film_id, title, film.description, film.release_year, film.language_id, film.original_language_id, film.rental_duration, film.rental_rate, film.length, film.replacement_cost, film.rating, film.special_features, film.last_update""".format(id)
     cursor.execute(query)
     result = cursor.fetchall()
     cursor.close()
@@ -95,7 +101,7 @@ def actorDetails(id):
 @app.route("/top5/actor/<id>")
 def top5MoviesActor(id):
     cursor = mysql.connection.cursor()
-    query = """SELECT film.film_id, film.title, category.name as category, COUNT(*) as rented FROM rental
+    query = """SELECT film.film_id, initcap(film.title) as title, category.name as category, COUNT(*) as rented FROM rental
 	            JOIN inventory ON rental.inventory_id = inventory.inventory_id
 	            JOIN film ON inventory.film_id = film.film_id
 	            JOIN film_category ON film.film_id = film_category.film_id
@@ -146,6 +152,8 @@ def customerDetails(id):
     cursor.close()
     return jsonify(result)
 
+
+# View Customers' Previously Rented History
 @app.route("/customer/<id>/previouslyrented")
 def previouslyrented(id):
     cursor = mysql.connection.cursor()
@@ -158,6 +166,7 @@ def previouslyrented(id):
     cursor.close()
     return (jsonify(result))
 
+# View Customers' Currently Renting History
 @app.route("/customer/<id>/currentlyrenting")
 def currentlyrenting(id):
     cursor = mysql.connection.cursor()
