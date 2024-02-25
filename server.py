@@ -119,8 +119,11 @@ def top5MoviesActor(id):
 @app.route("/allcustomers")
 def customer():
     cursor = mysql.connection.cursor()
-    query = """SELECT * from customer
-                ORDER BY customer_id"""
+    query = """SELECT customer.customer_id, customer.store_id, customer.first_name, customer.last_name, customer.email, customer.address_id, customer.active, customer.create_date, customer.last_update, address.address, address.address2, address.district, address.city_id, address.postal_code, address.phone, city.city, city.country_id, country.country FROM customer
+                JOIN address on customer.address_id = address.address_id
+                JOIN city ON address.city_id = city.city_id
+                JOIN country ON city.country_id = country.country_id
+                ORDER BY customer_id;"""
     cursor.execute(query)
     result = cursor.fetchall()
     cursor.close()
@@ -148,7 +151,11 @@ def customers():
 @app.route("/customer/<id>")
 def customerDetails(id):
     cursor = mysql.connection.cursor()
-    query = "SELECT * from customer WHERE customer_id = {}".format(id)
+    query = """SELECT customer.customer_id, customer.store_id, customer.first_name, customer.last_name, customer.email, customer.address_id, customer.active, customer.create_date, customer.last_update, address.address, address.address2, address.district, address.city_id, address.postal_code, address.phone, city.city, city.country_id, country.country FROM customer
+                JOIN address on customer.address_id = address.address_id
+                JOIN city ON address.city_id = city.city_id
+                JOIN country ON city.country_id = country.country_id
+                WHERE customer_id = {}""".format(id)
     cursor.execute(query)
     result = cursor.fetchall()
     cursor.close()
@@ -298,9 +305,16 @@ def addcustomer():
     firstName = data[0]['first_name']
     lastName = data[1]['last_name']
     email = data[2]['email']
+    address = data[3]['address']
+    address2 = data[4]['address2']
+    city = data[5]['city']
+    district = data[6]['district']
+    country = data[7]['country']
+    postal_code = data[8]['postal_code']
+    phone = data[9]['phone']
 
     # Make sure inputs are not invalid
-    if (firstName == "" or lastName == "" or email == ""):
+    if (firstName == "" or lastName == "" or email == "" or address == "" or district == "" or postal_code == "" or city == "" or country == "" or phone == ""):
         response = make_response("Error, Fields Invalid")
         response.headers["error"] = "Invalid Fields"
         response.status_code = 400
@@ -316,11 +330,60 @@ def addcustomer():
         response.headers["error"] = "Email Exists"
         response.status_code = 400
         return response
+    
+    # Check if address already exists
+    query = """SELECT address.address_id, city.city_id, country.country_id FROM address 
+        JOIN city ON address.city_id = city.city_id
+        JOIN country ON city.country_id = country.country_id
+        WHERE address.address = %s AND address.address2 = %s AND address.district = %s AND address.postal_code = %s AND city.city = %s AND country = %s;"""
+    cursor.execute(query, (address, address2, district, postal_code, city, country,))
+    addressExists = cursor.fetchall()
+    if (len(addressExists) != 0):
+        response = make_response("Error, Address Already Exists")
+        response.headers["error"] = "Address Exists"
+        response.status_code = 400
+        return response
 
-    # Add New Customer
+    # Check if country already exists and if so store it in variable. Else, add it and store ID.
+    query = "SELECT country_id FROM country WHERE country = %s;"
+    cursor.execute(query, (country,))
+    countryExists = cursor.fetchall()
+    countryID = ""
+    if (len(countryExists) != 0):
+        countryID = countryExists[0][0]
+    else: 
+        query = "INSERT INTO country(country, last_update) VALUES (%s, NOW())"
+        cursor.execute(query, (country,))
+        query = "SELECT country_id FROM country WHERE country = %s;"
+        cursor.execute(query, (country,))
+        countryID = cursor.fetchall()[0][0]
+
+    # Check if city already exists and if so store it in variable. Else, add it and store ID.
+    query = "SELECT city_id FROM city WHERE city = %s;"
+    cursor.execute(query, (city,))
+    cityExists = cursor.fetchall()
+    cityID = ""
+    if (len(cityExists) != 0):
+        cityID = cityExists[0][0]
+    else: 
+        query = "INSERT INTO city(city, country_id, last_update) VALUES (%s, %s NOW())"
+        cursor.execute(query, (city, countryID,))
+        query = "SELECT city_id FROM city WHERE city = %s;"
+        cursor.execute(query, (city,))
+        cityID = cursor.fetchall()[0][0]
+    
+    # Add new address and store address ID
+    query = """INSERT INTO address(address, address2, district, city_id, postal_code, phone, location, last_update)
+                VALUES(%s, %s, %s, %s, %s, %s, POINT(1,1), NOW());"""
+    cursor.execute(query, (address, address2, district, cityID, postal_code, phone,))
+    query = "SELECT address_id FROM address WHERE address = %s AND address2 = %s AND district = %s AND postal_code = %s;"
+    cursor.execute(query, (address, address2, district, postal_code,))
+    addressID = cursor.fetchall()[0][0]
+    
+    # Finally, Add New Customer
     query = """INSERT INTO customer(store_id, first_name, last_name, email, address_id, active, create_date, last_update)
-                         VALUES(1, %s, %s, %s, 1, 1, NOW(), NOW())"""
-    cursor.execute(query, (firstName, lastName, email,))
+                         VALUES(1, %s, %s, %s, %s, 1, NOW(), NOW())"""
+    cursor.execute(query, (firstName, lastName, email, addressID,))
     conn.commit()
 
     cursor.close()
@@ -334,17 +397,84 @@ def editcustomer():
     firstName = data[0]['first_name']
     lastName = data[1]['last_name']
     email = data[2]['email']
-    custID = data[3]['customer_id']
+    address = data[3]['address']
+    address2 = data[4]['address2']
+    city = data[5]['city']
+    district = data[6]['district']
+    country = data[7]['country']
+    postal_code = data[8]['postal_code']
+    phone = data[9]['phone']
+    custID = data[10]['customer_id']
+    addressID = data[11]['address_id']
+    cityID = data[12]['city_id']
+    countryID = data[13]['country_id']
 
     # Make sure inputs are not invalid
-    if (firstName == "" or lastName == "" or email == ""):
+    if (firstName == "" or lastName == "" or email == "" or address == "" or district == "" or postal_code == "" or city == "" or country == "" or phone == ""):
         response = make_response("Error, Fields Invalid")
         response.headers["error"] = "Invalid Fields"
         response.status_code = 400
         return response
     
-    # Update Existing Customer
+    # Check if country changed. If so, need new country ID,
     cursor = conn.cursor()
+    query = "SELECT country FROM country WHERE country_id = %s;"
+    cursor.execute(query, (countryID,))
+    oldCountry = cursor.fetchall()[0][0]
+    newCountryID = ""
+    if (oldCountry == country):
+        newCountryID = countryID
+    else:
+        # Check if new country already exists and if so store it in variable. Else, add it and store ID.
+        query = "SELECT country_id FROM country WHERE country = %s;"
+        cursor.execute(query, (country,))
+        countryExists = cursor.fetchall()
+        if (len(countryExists) != 0):
+            newCountryID = countryExists[0][0]
+        else: 
+            query = "INSERT INTO country(country, last_update) VALUES (%s, NOW())"
+            cursor.execute(query, (country,))
+            query = "SELECT country_id FROM country WHERE country = %s;"
+            cursor.execute(query, (country,))
+            newCountryID = cursor.fetchall()[0][0]
+    
+    # Check if city changed. If so, need new city ID.
+    query = "SELECT city FROM city WHERE city_id = %s;"
+    cursor.execute(query, (cityID,))
+    oldCity = cursor.fetchall()[0][0]
+    newCityID = ""
+    if (oldCity == city):
+        newCityID = cityID
+    else: 
+        # Check if city already exists and if so store it in variable. Else, add it and store ID.
+        query = "SELECT city_id FROM city WHERE city = %s;"
+        cursor.execute(query, (city,))
+        cityExists = cursor.fetchall()
+        if (len(cityExists) != 0):
+            newCityID = cityExists[0][0]
+        else: 
+            query = "INSERT INTO city(city, country_id, last_update) VALUES (%s, %s NOW())"
+            cursor.execute(query, (city, newCountryID,))
+            query = "SELECT city_id FROM city WHERE city = %s;"
+            cursor.execute(query, (city,))
+            newCityID = cursor.fetchall()[0][0]
+
+    # Check if any aspect of address changed. If so, need new address ID.
+    query = "SELECT address, address2, district, postal_code, phone FROM address WHERE address_id = %s;"
+    cursor.execute(query, (addressID,))
+    oldInfo = cursor.fetchall()
+    oldAddress = oldInfo[0][0]
+    oldAddress2 = oldInfo[0][1]
+    oldDistrict = oldInfo[0][2]
+    oldPostalCode = oldInfo[0][3]
+    oldPhone = oldInfo[0][4]
+
+    if (oldAddress != address or oldAddress2 != address2 or oldDistrict != district or oldPostalCode != postal_code or oldPhone != phone):
+        # Update Address ID to have new Address Info
+        query = "UPDATE address SET address = %s, address2 = %s, district = %s, postal_code = %s, phone = %s, city_id = %s WHERE address_id = %s"
+        cursor.execute(query, (address, address2, district, postal_code, phone, newCityID, addressID,))
+    
+    # Update Existing Customer
     query = "UPDATE customer SET first_name = %s, last_name = %s, email = %s WHERE customer_id = %s;"
     cursor.execute(query, (firstName, lastName, email, custID,))
     conn.commit()
