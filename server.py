@@ -453,7 +453,7 @@ def editcustomer():
         if (len(cityExists) != 0):
             newCityID = cityExists[0][0]
         else: 
-            query = "INSERT INTO city(city, country_id, last_update) VALUES (%s, %s NOW())"
+            query = "INSERT INTO city(city, country_id, last_update) VALUES (%s, %s, NOW())"
             cursor.execute(query, (city, newCountryID,))
             query = "SELECT city_id FROM city WHERE city = %s;"
             cursor.execute(query, (city,))
