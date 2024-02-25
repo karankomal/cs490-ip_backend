@@ -242,14 +242,68 @@ def rentfilm():
 @app.route("/returnfilm", methods=['POST'])
 def returnfilm():
     conn = mysql.connection
+    data = request.get_json()
+    custID = data[0]['customer_id']
+    filmID = data[1]['film_id']
+    
+    # Make sure film ID exists
+    if filmID == "":
+        response = make_response("Error, Film Not Entered")
+        response.headers["error"] = "Film Not Entered"
+        response.status_code = 400
+        return response
+
+    cursor = conn.cursor()
+    query = "SELECT film_id FROM film WHERE film_id = {}".format(filmID)
+    cursor.execute(query)
+    row = cursor.fetchone()
+    if row == None:
+        response = make_response("Error, Film DNE")
+        response.headers["error"] = "Film DNE"
+        response.status_code = 400
+        return response
+    
+    # Find valid rental and inventory IDs (if they exist)
+    cursor = conn.cursor()
+    query = """SELECT rental.rental_id, rental.inventory_id FROM 
+                (SELECT inventory.inventory_id FROM inventory
+                    JOIN film ON film.film_id = {} AND inventory.film_id = film.film_id) AS validInventories
+                JOIN rental on rental.inventory_id = validInventories.inventory_id AND rental.customer_id = {} AND rental.return_date IS NULL LIMIT 1;""".format(filmID, custID)
+    cursor.execute(query)
+    rentalAndInventoryIDs = cursor.fetchone()
+    if rentalAndInventoryIDs == None:
+        response = make_response("Error, Film Not Rented")
+        response.headers["error"] = "Film Not Rented"
+        response.status_code = 400
+        return response
+    
+    rentalID = rentalAndInventoryIDs[0]
+    inventoryID = rentalAndInventoryIDs[1]
+
+    # Complete rental return and update inventory to be at store 1.
+    query = "UPDATE rental SET return_date = NOW() WHERE rental_id = {};".format(rentalID)
+    cursor.execute(query)
+    query = "UPDATE inventory SET store_id = 1 WHERE inventory_id = {};".format(inventoryID)
+    cursor.execute(query)
+    conn.commit()
+
+    cursor.close()
+    return 'Done', 200
+
+@app.route("/addcustomer", methods=['POST'])
+def addcustomer():
+    conn = mysql.connection
+    return 'Done', 200
 
 @app.route("/editcustomer", methods=['POST'])
 def editcustomer():
     conn = mysql.connection
+    return 'Done', 200
 
 @app.route("/deletecustomer", methods=['POST'])
 def deletecustomer():
     conn = mysql.connection
+    return 'Done', 200
 
 
 if __name__ == "__main__":
