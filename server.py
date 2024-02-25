@@ -154,7 +154,6 @@ def customerDetails(id):
     cursor.close()
     return jsonify(result)
 
-
 # View Customers' Previously Rented History
 @app.route("/customer/<id>/previouslyrented")
 def previouslyrented(id):
@@ -239,6 +238,7 @@ def rentfilm():
     cursor.close()
     return 'Done', 200
 
+# Customer is Returning a Rental
 @app.route("/returnfilm", methods=['POST'])
 def returnfilm():
     conn = mysql.connection
@@ -290,6 +290,7 @@ def returnfilm():
     cursor.close()
     return 'Done', 200
 
+# Create A New Customer
 @app.route("/addcustomer", methods=['POST'])
 def addcustomer():
     conn = mysql.connection
@@ -325,6 +326,7 @@ def addcustomer():
     cursor.close()
     return 'Done', 200
 
+# Edit Existing Customer
 @app.route("/editcustomer", methods=['POST'])
 def editcustomer():
     conn = mysql.connection
@@ -341,18 +343,8 @@ def editcustomer():
         response.status_code = 400
         return response
     
-    # Make sure email doesn't already exist
-    cursor = conn.cursor()
-    query = "SELECT email FROM customer WHERE email = %s"
-    cursor.execute(query, (email,))
-    emailExists = cursor.fetchall()
-    if len(emailExists) != 0:
-        response = make_response("Error, Email Already Exists")
-        response.headers["error"] = "Email Exists"
-        response.status_code = 400
-        return response
-    
     # Update Existing Customer
+    cursor = conn.cursor()
     query = "UPDATE customer SET first_name = %s, last_name = %s, email = %s WHERE customer_id = %s;"
     cursor.execute(query, (firstName, lastName, email, custID,))
     conn.commit()
@@ -360,11 +352,70 @@ def editcustomer():
     cursor.close()
     return 'Done', 200
 
-@app.route("/deletecustomer", methods=['POST'])
+# Delete Customer
+@app.route("/deletecustomer", methods=['DELETE'])
 def deletecustomer():
     conn = mysql.connection
-    return 'Done', 200
+    data = request.get_json()
+    custID = data[0]['customer_id']
 
+    # Check for current rentals
+    cursor = conn.cursor()
+    query = """SELECT customer.customer_id, COUNT(*) as count FROM customer
+	            JOIN rental ON customer.customer_id = rental.customer_id
+	            WHERE return_date IS NULL AND customer.customer_id = {}
+	            GROUP BY customer.customer_id ORDER BY COUNT(*) DESC""".format(custID)
+    cursor.execute(query)
+    rentals = cursor.fetchall()
+    if (len(rentals)) > 0:
+        response = make_response("Error, Customer currently has rentals.")
+        response.headers["error"] = "Currently Renting!"
+        response.status_code = 400
+        return response
+    
+    # Make sure customer has no outstanding balance
+    query = "SELECT get_customer_balance({}, NOW())".format(custID)
+    cursor.execute(query)
+    balance = cursor.fetchall()
+    if balance[0][0] > 0.00:
+        response = make_response("Error, Outstanding Balance")
+        response.headers["error"] = "Outstanding Balance"
+        response.status_code = 400
+        return response
+    
+    # Check for payment history
+    query = "SELECT * FROM payment WHERE customer_id = {};".format(custID)
+    cursor.execute(query)
+    paymentHistory = cursor.fetchall()
+
+    # If so, delete all payment history and reset autoincrementer.
+    if len(paymentHistory) > 0:
+        query = "DELETE FROM payment WHERE customer_id = {};".format(custID)
+        cursor.execute(query)
+        query = "ALTER TABLE payment AUTO_INCREMENT = 1;"
+        cursor.execute(query)
+    
+    # Check for rental history
+    query = "SELECT * FROM rental WHERE customer_id = {};".format(custID)
+    cursor.execute(query)
+    rentalHistory = cursor.fetchall()
+
+    # If so, delete all rental history and reset autoincrementer.
+    if len(rentalHistory) > 0:
+        query = "DELETE FROM rental WHERE customer_id = {};".format(custID)
+        cursor.execute(query)
+        query = "ALTER TABLE rental AUTO_INCREMENT = 1;"
+        cursor.execute(query)
+    
+    # Finally, delete the customer and reset the autoincrementer.
+    query = "DELETE FROM customer WHERE customer_id = {};".format(custID)
+    cursor.execute(query)
+    query = "ALTER TABLE customer AUTO_INCREMENT = 1;"
+    cursor.execute(query)
+    conn.commit()
+
+    cursor.close()
+    return 'Done', 200
 
 if __name__ == "__main__":
     app.run(debug=True)
