@@ -293,6 +293,37 @@ def returnfilm():
 @app.route("/addcustomer", methods=['POST'])
 def addcustomer():
     conn = mysql.connection
+    data = request.get_json()
+    firstName = data[0]['first_name']
+    lastName = data[1]['last_name']
+    email = data[2]['email']
+    print(str(email))
+
+    # Make sure inputs are not invalid
+    if (firstName == "" or lastName == "" or email == ""):
+        response = make_response("Error, Fields Invalid")
+        response.headers["error"] = "Invalid Fields"
+        response.status_code = 400
+        return response
+    
+    # Make sure email doesn't already exist
+    cursor = conn.cursor()
+    query = "SELECT email FROM customer WHERE email = %s"
+    cursor.execute(query, (email,))
+    emailExists = cursor.fetchall()
+    if len(emailExists) != 0:
+        response = make_response("Error, Email Already Exists")
+        response.headers["error"] = "Email Exists"
+        response.status_code = 400
+        return response
+
+    # Add New Customer
+    query = """INSERT INTO customer(store_id, first_name, last_name, email, address_id, active, create_date, last_update)
+                         VALUES(1, %s, %s, %s, 1, 1, NOW(), NOW())"""
+    cursor.execute(query, (firstName, lastName, email,))
+    conn.commit()
+
+    cursor.close()
     return 'Done', 200
 
 @app.route("/editcustomer", methods=['POST'])
