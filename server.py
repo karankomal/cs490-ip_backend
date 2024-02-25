@@ -327,7 +327,7 @@ def addcustomer():
     return 'Done', 200
 
 # Edit Existing Customer
-@app.route("/editcustomer", methods=['POST'])
+@app.route("/editcustomer", methods=['PATCH'])
 def editcustomer():
     conn = mysql.connection
     data = request.get_json()
