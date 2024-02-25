@@ -1,15 +1,17 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 from flask_paginate import Pagination
 from flask_mysqldb import MySQL
 
-app = Flask(__name__)
 
+
+app = Flask(__name__)
+mysql = MySQL()
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = 'password'
 app.config['MYSQL_DB'] = 'sakila'
 
-mysql = MySQL(app)
+mysql.init_app(app)
 
 # Home
 @app.route("/allfilms")
@@ -178,6 +180,77 @@ def currentlyrenting(id):
     result = cursor.fetchall()
     cursor.close()
     return (jsonify(result))
+
+# Rent Film Out to Customer
+@app.route("/rentfilm", methods=['POST'])
+def rentfilm():
+    conn = mysql.connection
+
+    data = request.get_json()
+    custID = data[0]['customer_id']
+    filmID = data[1]['film_id']
+    
+    # Make sure customer ID exists
+    if custID == "":
+        response = make_response("Error, Customer DNE")
+        response.headers["error"] = "Customer DNE"
+        response.status_code = 400
+        return response
+
+    cursor = conn.cursor()
+    query = "SELECT customer_id FROM customer WHERE customer_id = {}".format(custID)
+    cursor.execute(query)
+    row = cursor.fetchone()
+    if row == None:
+        response = make_response("Error, Customer DNE")
+        response.headers["error"] = "Customer DNE"
+        response.status_code = 400
+        return response
+    
+    # Make sure movie is in stock
+    query = "CALL film_in_stock({}, 1, @c);".format(filmID)
+    cursor.execute(query)
+    stock = cursor.fetchall()
+    print(stock)
+    print(len(stock))
+    if len(stock) < 1:
+        response = make_response("Error, Out of Stock")
+        response.headers["error"] = "Out of Stock"
+        response.status_code = 400
+        return response
+    
+    # Make sure customer has no outstanding balance
+    query = "SELECT get_customer_balance({}, NOW())".format(custID)
+    cursor.execute(query)
+    balance = cursor.fetchall()
+    if balance[0][0] > 0.00:
+        response = make_response("Error, Outstanding Balance")
+        response.headers["error"] = "Outstanding Balance"
+        response.status_code = 400
+        return response
+    
+    # If all checks pass, rent movie to customer.
+    inventID = stock[0][0]
+    query = """INSERT INTO rental(rental_date, inventory_id, customer_id, staff_id, last_update) 
+                            VALUES(NOW(), {}, {}, 1, NOW());""".format(inventID, custID)
+    cursor.execute(query)
+    conn.commit()
+    
+    cursor.close()
+    return 'Done', 200
+
+@app.route("/returnfilm", methods=['POST'])
+def returnfilm():
+    conn = mysql.connection
+
+@app.route("/editcustomer", methods=['POST'])
+def editcustomer():
+    conn = mysql.connection
+
+@app.route("/deletecustomer", methods=['POST'])
+def deletecustomer():
+    conn = mysql.connection
+
 
 if __name__ == "__main__":
     app.run(debug=True)
